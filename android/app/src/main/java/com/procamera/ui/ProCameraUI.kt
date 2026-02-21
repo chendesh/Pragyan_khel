@@ -72,11 +72,18 @@ fun ProCameraScreen(viewModel: CameraViewModel) {
             }
         }
 
-        // Top Info Bar
+        // Top Info Bar: High Visibility HUD
         Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-            Text(uiState.currentMessage, color = Color.Green, fontSize = 12.sp)
-            Spacer(Modifier.height(8.dp))
-            Text("FPS: ${uiState.fps}", color = Color.White)
+            Text(uiState.currentMessage, color = Color.Green, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(4.dp))
+            Row {
+                Text("FPS: ${uiState.fps}", color = Color.White, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.width(12.dp))
+                Text("ISO: ${uiState.iso}", color = Color.Yellow)
+                Spacer(Modifier.width(12.dp))
+                val shutterDisplayString = "1/${(1_000_000_000.0 / uiState.shutterSpeed).toInt()}s"
+                Text("SHUTTER: $shutterDisplayString", color = Color.Yellow)
+            }
         }
 
         // Manual Controls Bottom Overlay
@@ -248,12 +255,12 @@ fun PlaybackScreen(
             ) {
                 Text("CAPTURE METADATA", color = Color.Yellow, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 Spacer(Modifier.height(4.dp))
-                MetadataItem("ISO", metadata.iso.toString())
-                MetadataItem("SHUTTER", metadata.shutterSpeed)
-                MetadataItem("RECORD FPS", metadata.actualFps.toString())
-                MetadataItem("RESOLUTION", metadata.resolution)
+                MetadataItem("ISO", metadata.iso.toString(), size = 18)
+                MetadataItem("SHUTTER", metadata.shutterSpeed, size = 18)
+                MetadataItem("RECORD FPS", metadata.actualFps.toString(), size = 18)
+                MetadataItem("RESOLUTION", metadata.resolution, size = 18)
                 val date = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date(metadata.timestamp))
-                MetadataItem("TIME", date)
+                MetadataItem("TIME", date, size = 18)
             }
         }
 
@@ -271,9 +278,9 @@ fun PlaybackScreen(
 }
 
 @Composable
-fun MetadataItem(label: String, value: String) {
-    Row {
-        Text("$label: ", color = Color.LightGray, fontSize = 12.sp)
-        Text(value, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+fun MetadataItem(label: String, value: String, size: Int = 12) {
+    Row(modifier = Modifier.padding(vertical = 2.dp)) {
+        Text("$label: ", color = Color.Yellow, fontSize = size.sp, fontWeight = FontWeight.Bold)
+        Text(value, color = Color.White, fontSize = size.sp, fontWeight = FontWeight.ExtraBold)
     }
 }
