@@ -109,16 +109,20 @@ class RecordingEngine {
                     encodedData.position(bufferInfo.offset)
                     encodedData.limit(bufferInfo.offset + bufferInfo.size)
                     
-                    // PURE 240 FPS: No time stretching
-                    // This ensures the metadata reports exactly 240 FPS in the gallery
+                    // SLOW MOTION AT 240 FPS LABEL:
+                    // We tell the file it is 240fps (metadata)
+                    // but we space the frames so it PLAYS in slow motion.
                     if (startTimeUs == -1L) startTimeUs = bufferInfo.presentationTimeUs
-                    val frameDurationUs = 1_000_000L / captureFps
-                    bufferInfo.presentationTimeUs = startTimeUs + (frameCount * frameDurationUs).toLong()
+                    
+                    // To be 4x slow motion but labelled as 240fps, we use 60fps timing
+                    val slowMoTimingFps = 60 
+                    val frameDurationUs = 1_000_000L / slowMoTimingFps
+                    bufferInfo.presentationTimeUs = startTimeUs + (frameCount * frameDurationUs)
 
                     try {
                         muxer.writeSampleData(videoTrackIndex, encodedData, bufferInfo)
                         frameCount++
-                        if (frameCount % 240 == 0) Log.d("RecordingEngine", "Total frames written: $frameCount")
+                        if (frameCount % 60 == 0) Log.d("RecordingEngine", "Total frames written: $frameCount")
                     } catch (e: Exception) {
                         Log.e("RecordingEngine", "muxer.writeSampleData fail: $e")
                     }

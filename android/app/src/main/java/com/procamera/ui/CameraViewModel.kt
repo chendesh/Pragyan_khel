@@ -102,24 +102,38 @@ class CameraViewModel(
     }
 
     private fun startSession() {
-        // Update ManualController with the current FPS before starting
-        manualController.setFpsRange(android.util.Range(_uiState.value.fps, _uiState.value.fps))
-        
-        val surface = previewSurface ?: return
-        val recordingActive = _uiState.value.isRecording
-        
-        val surfaces = mutableListOf(surface)
-        
-        if (recordingActive) {
-            val file = currentVideoFile ?: return
-            val fps = _uiState.value.fps
-            val size = _uiState.value.preferredSize
-            // 40Mbps for high clarity. Reports 240fps in gallery while being "lightly" slow.
-            val recordingSurface = recordingEngine.setup(file, size.width, size.height, fps, 240, 40_000_000)
-            surfaces.add(recordingSurface)
+        try {
+            // Update ManualController with the current FPS before starting
+            manualController.setFpsRange(android.util.Range(_uiState.value.fps, _uiState.value.fps))
+            
+            val surface = previewSurface ?: return
+            val recordingActive = _uiState.value.isRecording
+            
+            val surfaces = mutableListOf(surface)
+            
+            if (recordingActive) {
+                val file = currentVideoFile ?: return
+                val fps = _uiState.value.fps
+                val size = _uiState.value.preferredSize
+                
+                Log.d("CameraViewModel", "Setting up recorder: ${size.width}x${size.height} @ $fps fps")
+                
+                try {
+                    // Match the recorder size to the hardware-supported size to prevent crashes
+                    val recordingSurface = recordingEngine.setup(file, size.width, size.height, fps, 240, 40_000_000)
+                    surfaces.add(recordingSurface)
+                } catch (e: Exception) {
+                    Log.e("CameraViewModel", "Encoder setup failed: $e")
+                    _uiState.value = _uiState.value.copy(isRecording = false, currentMessage = "Hardware Encoder Error")
+                    return
+                }
+            }
+            
+            cameraManager.createHighSpeedSession(surfaces)
+        } catch (e: Exception) {
+            Log.e("CameraViewModel", "Session failed: $e")
+            _uiState.value = _uiState.value.copy(currentMessage = "Camera busy or restricted")
         }
-        
-        cameraManager.createHighSpeedSession(surfaces)
     }
 
     fun updateIso(iso: Int) {
@@ -222,7 +236,8 @@ class CameraViewModel(
                 val file = currentVideoFile
                 if (file != null && file.exists() && file.length() > 0) {
                     // Save sidecar metadata
-                    metadataWriter.saveMetadata(file, _uiState.value.iso, _uiState.value.shutterSpeed, _uiState.value.fps, "1280x720")
+                    val size = _uiState.value.preferredSize
+                    metadataWriter.saveMetadata(file, _uiState.value.iso, _uiState.value.shutterSpeed, _uiState.value.fps, "${size.width}x${size.height}")
                     
                     // Move to Gallery if on Android 10+
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {

@@ -40,10 +40,16 @@ class HardwareCapabilityCheck(private val context: Context) {
                     configMap.getHighSpeedVideoFpsRangesFor(size).any { it.upper >= maxFps }
                 }
 
-                // Prefer a size that has a FIXED range at the max FPS (e.g. [240, 240])
-                val preferredSize = supportedSizes.find { size ->
-                    configMap.getHighSpeedVideoFpsRangesFor(size).any { it.lower == maxFps && it.upper == maxFps }
-                } ?: supportedSizes.maxByOrNull { it.width * it.height } ?: highSpeedSizes.firstOrNull()
+                // Find sizes that support 240fps (or the max fps)
+                val target = maxFps
+                val supportedByFps = highSpeedSizes.filter { size ->
+                    configMap.getHighSpeedVideoFpsRangesFor(size).any { it.upper >= target }
+                }
+
+                // Of those, try to find 1080p. If not, pick the largest available.
+                val preferredSize = supportedByFps.find { it.width == 1920 && it.height == 1080 }
+                    ?: supportedByFps.maxByOrNull { it.width * it.height }
+                    ?: highSpeedSizes.first()
 
                 results[cameraId] = HighSpeedCapability(
                     isSupported = maxFps >= 120,
