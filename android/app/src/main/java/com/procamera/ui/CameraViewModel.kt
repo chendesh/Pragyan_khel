@@ -123,8 +123,9 @@ class CameraViewModel(
                 Log.d("CameraViewModel", "Recording Initialized: ${size.width}x${size.height} @ $targetFps fps")
                 
                 try {
-                    // setup(file, width, height, captureFps, playbackFps, bitrate)
-                    val recordingSurface = recordingEngine.setup(file, size.width, size.height, targetFps, 240, 50_000_000)
+                    val settingsTag = "ISO: ${_uiState.value.iso} | 1/${(1_000_000_000.0 / _uiState.value.shutterSpeed).toInt()}s | $targetFps FPS"
+                    // setup(file, width, height, captureFps, playbackFps, bitrate, settingsTag)
+                    val recordingSurface = recordingEngine.setup(file, size.width, size.height, targetFps, 240, 50_000_000, settingsTag)
                     surfaces.add(recordingSurface)
                 } catch (e: Exception) {
                     Log.e("CameraViewModel", "Recorder setup failed: $e")

@@ -19,7 +19,7 @@ class RecordingEngine {
     private var captureFps: Int = 240
 
     @Synchronized
-    fun setup(outputFile: File, width: Int, height: Int, captureFps: Int, playbackFps: Int, bitrate: Int): Surface {
+    fun setup(outputFile: File, width: Int, height: Int, captureFps: Int, playbackFps: Int, bitrate: Int, settingsTag: String = ""): Surface {
         this.captureFps = captureFps
         this.playbackFps = playbackFps
         
@@ -32,6 +32,9 @@ class RecordingEngine {
         format.setInteger(MediaFormat.KEY_FRAME_RATE, playbackFps)
         format.setInteger(MediaFormat.KEY_CAPTURE_RATE, captureFps)
         format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
+        
+        // Burn Metadata into the Format Header
+        format.setString("manual-settings", settingsTag)
         
         // STABILITY FIRST: Use Main Profile and matched resolution
         format.setInteger(MediaFormat.KEY_PROFILE, MediaCodecInfo.CodecProfileLevel.AVCProfileMain)
