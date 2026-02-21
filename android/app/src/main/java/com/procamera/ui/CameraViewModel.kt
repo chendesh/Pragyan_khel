@@ -330,8 +330,17 @@ class CameraViewModel(
                 values.put(MediaStore.Video.Media.IS_PENDING, 0)
                 context.contentResolver.update(uri, values, null, null)
                 
-                // Also save the JSON file to Downloads/ProCamera or similar public location
+                // Also save the JSON and SRT files to public location
                 saveJsonToPublicStorage(file.nameWithoutExtension + "_metadata.json", jsonContent)
+                
+                // Construct SRT content for public storage
+                val srtName = file.nameWithoutExtension + ".srt"
+                val sProject = jsonContent.let { 
+                    val obj = org.json.JSONObject(it)
+                    "ISO: ${obj.getInt("iso")} | SHUTTER: ${obj.getString("shutter_speed_formatted")} | ${obj.getInt("fps")} FPS | ${obj.getString("resolution")}"
+                }
+                val srtContent = "1\n00:00:00,000 --> 00:59:59,000\n$sProject"
+                saveJsonToPublicStorage(srtName, srtContent) // Reusing the same function for .srt
                 
                 file.delete() // Clean up video cache
                 

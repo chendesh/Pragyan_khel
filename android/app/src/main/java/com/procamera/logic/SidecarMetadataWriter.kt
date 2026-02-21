@@ -14,22 +14,34 @@ class SidecarMetadataWriter {
         resolution: String
     ): String {
         val metadataFile = File(videoFile.parent, "${videoFile.nameWithoutExtension}_metadata.json")
+        val srtFile = File(videoFile.parent, "${videoFile.nameWithoutExtension}.srt")
+        
+        val shutterVal = if (shutterSpeed > 0) "1/${(1_000_000_000.0 / shutterSpeed).toInt()}s" else "Auto"
+        
+        // 1. Generate JSON
         val json = JSONObject().apply {
             put("filename", videoFile.name)
             put("timestamp", System.currentTimeMillis())
             put("iso", iso)
             put("shutter_speed_ns", shutterSpeed)
-            val shutterVal = if (shutterSpeed > 0) "${1_000_000_000.0 / shutterSpeed}s" else "Auto"
             put("shutter_speed_formatted", shutterVal)
             put("fps", fps)
             put("resolution", resolution)
         }
-
         val jsonString = json.toString(4)
+
+        // 2. Generate SRT (Subtitles) - Visible in external players
+        val srtContent = """
+            1
+            00:00:00,000 --> 00:59:59,000
+            ISO: $iso | SHUTTER: $shutterVal | $fps FPS | $resolution
+        """.trimIndent()
+
         try {
-            FileOutputStream(metadataFile).use { fos ->
-                fos.write(jsonString.toByteArray())
-            }
+            // Write JSON
+            FileOutputStream(metadataFile).use { it.write(jsonString.toByteArray()) }
+            // Write SRT
+            FileOutputStream(srtFile).use { it.write(srtContent.toByteArray()) }
         } catch (e: Exception) {
             e.printStackTrace()
         }
