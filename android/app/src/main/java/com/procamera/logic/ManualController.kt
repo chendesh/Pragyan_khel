@@ -10,7 +10,7 @@ class ManualController {
     private var currentFpsRange: Range<Int> = Range(240, 240)
 
     fun applyManualSettings(builder: CaptureRequest.Builder) {
-        // Disable Auto Exposure to enable manual control
+        // Enable manual control by turning off Auto-Exposure
         builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
 
         // Apply Shutter Speed (Sensor Exposure Time)
@@ -18,6 +18,9 @@ class ManualController {
 
         // Apply ISO (Sensor Sensitivity)
         builder.set(CaptureRequest.SENSOR_SENSITIVITY, currentIso)
+        
+        // Ensure we are in video record intent for better stability
+        builder.set(CaptureRequest.CONTROL_CAPTURE_INTENT, CaptureRequest.CONTROL_CAPTURE_INTENT_VIDEO_RECORD)
 
         // Apply Target FPS Range
         builder.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, currentFpsRange)

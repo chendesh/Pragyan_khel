@@ -28,16 +28,14 @@ class RecordingEngine {
         format.setInteger(MediaFormat.KEY_BIT_RATE, bitrate)
         format.setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR)
         format.setInteger(MediaFormat.KEY_FRAME_RATE, playbackFps) // Target playback speed
-        format.setInteger(MediaFormat.KEY_CAPTURE_RATE, captureFps) // Original capture speed, Critical for high speed metadata
+        format.setInteger(MediaFormat.KEY_CAPTURE_RATE, captureFps) // Original capture speed
         format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
         
-        // Optimize for speed: Remove B-frames
+        // STABILITY FIRST: Use Main Profile for 240fps compatibility
         format.setInteger(MediaFormat.KEY_PROFILE, MediaCodecInfo.CodecProfileLevel.AVCProfileMain)
         format.setInteger(MediaFormat.KEY_MAX_B_FRAMES, 0)
-        
-        // High speed hints for the encoder
-        format.setInteger(MediaFormat.KEY_OPERATING_RATE, captureFps)
-        format.setInteger(MediaFormat.KEY_PRIORITY, 0) // Real-time
+        format.setInteger(MediaFormat.KEY_OPERATING_RATE, 240) 
+        format.setInteger(MediaFormat.KEY_PRIORITY, 0) // Real-time priority
 
         mediaCodec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
         mediaCodec?.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)

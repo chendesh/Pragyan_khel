@@ -103,16 +103,18 @@ fun ProCameraScreen(viewModel: CameraViewModel) {
                     viewModel.updateIso(nextIso)
                 })
 
-                // Shutter Toggle
+                // Shutter Toggle: Faster speeds for high-speed video
                 val shutterDisplay = "1/${(1_000_000_000.0 / uiState.shutterSpeed).toInt()}"
                 ManualDial(label = "SHUTTER", value = shutterDisplay, onClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     val nextShutter = when(uiState.shutterSpeed) {
-                        16_666_666L -> 8_000_000L  // 1/60 -> 1/125
-                        8_000_000L -> 4_000_000L   // 1/125 -> 1/250
                         4_000_000L -> 2_000_000L   // 1/250 -> 1/500
                         2_000_000L -> 1_000_000L   // 1/500 -> 1/1000
-                        else -> 16_666_666L         // -> 1/60
+                        1_000_000L -> 500_000L     // 1/1000 -> 1/2000
+                        500_000L -> 16_666_666L    // 1/2000 -> 1/60
+                        16_666_666L -> 8_000_000L  // 1/60 -> 1/125
+                        8_000_000L -> 4_000_000L   // 1/125 -> 1/250
+                        else -> 4_000_000L
                     }
                     viewModel.updateShutterSpeed(nextShutter)
                 })

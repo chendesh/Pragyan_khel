@@ -113,20 +113,18 @@ class CameraViewModel(
             
             if (recordingActive) {
                 val file = currentVideoFile ?: return
+                val targetFps = _uiState.value.fps
+                val size = _uiState.value.preferredSize // Use the validated hardware-supported size
                 
-                // Get the best hardware-supported size (aiming for 1080p)
-                val size = _uiState.value.preferredSize
-                val fps = _uiState.value.fps
-                
-                Log.d("CameraViewModel", "High-Speed Recording: ${size.width}x${size.height} @ $fps fps")
+                Log.d("CameraViewModel", "Recording Initialized: ${size.width}x${size.height} @ $targetFps fps")
                 
                 try {
                     // setup(file, width, height, captureFps, playbackFps, bitrate)
-                    val recordingSurface = recordingEngine.setup(file, size.width, size.height, fps, 240, 50_000_000)
+                    val recordingSurface = recordingEngine.setup(file, size.width, size.height, targetFps, 240, 50_000_000)
                     surfaces.add(recordingSurface)
                 } catch (e: Exception) {
                     Log.e("CameraViewModel", "Recorder setup failed: $e")
-                    _uiState.value = _uiState.value.copy(isRecording = false, currentMessage = "Encoder Busy")
+                    _uiState.value = _uiState.value.copy(isRecording = false, currentMessage = "Hardware Encoder Error")
                     return
                 }
             }
@@ -151,15 +149,22 @@ class CameraViewModel(
     }
 
     fun updateFps(fps: Int) {
-        _uiState.value = _uiState.value.copy(fps = fps)
+        val id = cameraId ?: "0"
+        val bestSize = capabilityCheck.getBestSizeForFps(id, fps) ?: android.util.Size(1280, 720)
+        
+        _uiState.value = _uiState.value.copy(
+            fps = fps,
+            preferredSize = bestSize,
+            currentMessage = "Mode: ${bestSize.width}x${bestSize.height} @ $fps FPS"
+        )
+        
         manualController.setFpsRange(android.util.Range(fps, fps))
         
-        // Safety: If FPS is high, Shutter MUST be fast enough (e.g., 240fps needs < 1/240s)
-        val maxShutterNs = (1_000_000_000L / fps) - 100_000L // Subtract a bit for safety
+        // Safety: If FPS is high, Shutter MUST be fast enough
+        val maxShutterNs = (1_000_000_000L / fps) - 100_000L
         if (_uiState.value.shutterSpeed > maxShutterNs) {
-            updateShutterSpeed(4_000_000L) // Set to 1/250s as a safe default for high speed
+            updateShutterSpeed(4_000_000L) 
         } else {
-            // FPS change requires session restart
             startSession()
         }
     }
