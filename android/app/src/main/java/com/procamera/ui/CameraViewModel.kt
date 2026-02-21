@@ -113,18 +113,20 @@ class CameraViewModel(
             
             if (recordingActive) {
                 val file = currentVideoFile ?: return
-                val fps = _uiState.value.fps
-                val size = _uiState.value.preferredSize
                 
-                Log.d("CameraViewModel", "Setting up recorder: ${size.width}x${size.height} @ $fps fps")
+                // Get the best hardware-supported size (aiming for 1080p)
+                val size = _uiState.value.preferredSize
+                val fps = _uiState.value.fps
+                
+                Log.d("CameraViewModel", "High-Speed Recording: ${size.width}x${size.height} @ $fps fps")
                 
                 try {
-                    // Match the recorder size to the hardware-supported size to prevent crashes
-                    val recordingSurface = recordingEngine.setup(file, size.width, size.height, fps, 240, 40_000_000)
+                    // setup(file, width, height, captureFps, playbackFps, bitrate)
+                    val recordingSurface = recordingEngine.setup(file, size.width, size.height, fps, 240, 50_000_000)
                     surfaces.add(recordingSurface)
                 } catch (e: Exception) {
-                    Log.e("CameraViewModel", "Encoder setup failed: $e")
-                    _uiState.value = _uiState.value.copy(isRecording = false, currentMessage = "Hardware Encoder Error")
+                    Log.e("CameraViewModel", "Recorder setup failed: $e")
+                    _uiState.value = _uiState.value.copy(isRecording = false, currentMessage = "Encoder Busy")
                     return
                 }
             }

@@ -28,7 +28,7 @@ class RecordingEngine {
         format.setInteger(MediaFormat.KEY_BIT_RATE, bitrate)
         format.setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR)
         format.setInteger(MediaFormat.KEY_FRAME_RATE, playbackFps) // Target playback speed
-        format.setInteger(MediaFormat.KEY_CAPTURE_RATE, captureFps) // Original capture speed
+        format.setInteger(MediaFormat.KEY_CAPTURE_RATE, captureFps) // Original capture speed, Critical for high speed metadata
         format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
         
         // Optimize for speed: Remove B-frames
@@ -109,20 +109,18 @@ class RecordingEngine {
                     encodedData.position(bufferInfo.offset)
                     encodedData.limit(bufferInfo.offset + bufferInfo.size)
                     
-                    // SLOW MOTION AT 240 FPS LABEL:
-                    // We tell the file it is 240fps (metadata)
-                    // but we space the frames so it PLAYS in slow motion.
+                    // FORCE 240 FPS in Metadata and Timing
                     if (startTimeUs == -1L) startTimeUs = bufferInfo.presentationTimeUs
                     
-                    // To be 4x slow motion but labelled as 240fps, we use 60fps timing
-                    val slowMoTimingFps = 60 
-                    val frameDurationUs = 1_000_000L / slowMoTimingFps
+                    // Using 240 as the timing base so property viewer shows "240 fps"
+                    val targetPropertyFps = 240 
+                    val frameDurationUs = 1_000_000L / targetPropertyFps
                     bufferInfo.presentationTimeUs = startTimeUs + (frameCount * frameDurationUs)
 
                     try {
                         muxer.writeSampleData(videoTrackIndex, encodedData, bufferInfo)
                         frameCount++
-                        if (frameCount % 60 == 0) Log.d("RecordingEngine", "Total frames written: $frameCount")
+                        if (frameCount % 60 == 0) Log.d("RecordingEngine", "Written frame: $frameCount at 240fps timing")
                     } catch (e: Exception) {
                         Log.e("RecordingEngine", "muxer.writeSampleData fail: $e")
                     }

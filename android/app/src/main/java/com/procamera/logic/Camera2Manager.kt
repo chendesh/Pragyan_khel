@@ -77,7 +77,7 @@ class Camera2Manager(
         captureSession = null
         
         try {
-            // Use ConstrainedHighSpeedCaptureSession for High-FPS (>120 FPS)
+            // MANDATORY for 240 FPS: Use ConstrainedHighSpeedCaptureSession
             camera.createConstrainedHighSpeedCaptureSession(
                 surfaces,
                 object : CameraCaptureSession.StateCallback() {
@@ -86,37 +86,18 @@ class Camera2Manager(
                             captureSession = session
                             startHighSpeedPreview()
                         } else {
-                            // Fallback if not a high speed session
-                            Log.w("Camera2Manager", "Session is not high speed, using normal capture")
+                            Log.e("Camera2Manager", "Not a HighSpeed session")
                         }
                     }
 
                     override fun onConfigureFailed(p0: CameraCaptureSession) {
-                        Log.e("Camera2Manager", "Failed to configure high speed session")
+                        Log.e("Camera2Manager", "HighSpeed configuration failed")
                     }
                 },
                 backgroundHandler
             )
         } catch (e: Exception) {
-            Log.e("Camera2Manager", "High Speed Session failed, falling back to normal session: $e")
-            // Fallback to regular capture session if hardware fails high speed
-            camera.createCaptureSession(
-                surfaces,
-                object : CameraCaptureSession.StateCallback() {
-                    override fun onConfigured(session: CameraCaptureSession) {
-                        captureSession = null // Not high-speed
-                        // Normal preview start logic
-                        val builder = cameraDevice?.createCaptureRequest(CameraDevice.TEMPLATE_RECORD) ?: return
-                        surfaces.forEach { builder.addTarget(it) }
-                        manualController.applyManualSettings(builder)
-                        session.setRepeatingRequest(builder.build(), null, backgroundHandler)
-                    }
-                    override fun onConfigureFailed(p0: CameraCaptureSession) {
-                        Log.e("Camera2Manager", "Total session failure")
-                    }
-                },
-                backgroundHandler
-            )
+            Log.e("Camera2Manager", "Fatal session error: $e")
         }
     }
 
