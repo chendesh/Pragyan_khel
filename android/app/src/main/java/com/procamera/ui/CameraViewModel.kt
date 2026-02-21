@@ -256,12 +256,17 @@ class CameraViewModel(
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                         saveToGalleryAndroidQ(file, jsonResponse)
                     } else {
-                        MediaScannerConnection.scanFile(context, arrayOf(file.absolutePath), null) { _, uri ->
-                            viewModelScope.launch(Dispatchers.Main) {
+                        // For legacy devices, wait for MediaScanner
+                        kotlinx.coroutines.suspendCancellableCoroutine<android.net.Uri?> { continuation ->
+                            MediaScannerConnection.scanFile(context, arrayOf(file.absolutePath), null) { _, uri ->
+                                continuation.resume(uri) {}
+                            }
+                        }.let { uri ->
+                            withContext(Dispatchers.Main) {
                                 android.widget.Toast.makeText(context, "Saved to Gallery!", android.widget.Toast.LENGTH_SHORT).show()
                                 _uiState.value = _uiState.value.copy(
                                     isSaving = false, 
-                                    currentMessage = "Captured!",
+                                    currentMessage = "Recording Completed!",
                                     latestVideoUri = uri,
                                     showSavedConfirmation = true
                                 )
@@ -313,55 +318,60 @@ class CameraViewModel(
         }
     }
 
-    private fun saveToGalleryAndroidQ(file: File, jsonContent: String) {
-        val values = ContentValues().apply {
-            put(MediaStore.Video.Media.DISPLAY_NAME, file.name)
-            put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
-            put(MediaStore.Video.Media.RELATIVE_PATH, "DCIM/ProCamera")
-            put(MediaStore.Video.Media.IS_PENDING, 1)
-        }
+    private suspend fun saveToGalleryAndroidQ(file: File, jsonContent: String) {
+        withContext(Dispatchers.IO) {
+            val values = ContentValues().apply {
+                put(MediaStore.Video.Media.DISPLAY_NAME, file.name)
+                put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
+                put(MediaStore.Video.Media.RELATIVE_PATH, "DCIM/ProCamera")
+                put(MediaStore.Video.Media.IS_PENDING, 1)
+            }
 
-        val collection = MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-        val uri = context.contentResolver.insert(collection, values)
+            val collection = MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+            val uri = context.contentResolver.insert(collection, values)
 
-        if (uri != null) {
-            try {
-                context.contentResolver.openOutputStream(uri)?.use { outputStream ->
-                    file.inputStream().use { inputStream ->
-                        inputStream.copyTo(outputStream)
+            if (uri != null) {
+                try {
+                    context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                        file.inputStream().use { inputStream ->
+                            inputStream.copyTo(outputStream)
+                        }
+                    }
+                    values.clear()
+                    values.put(MediaStore.Video.Media.IS_PENDING, 0)
+                    context.contentResolver.update(uri, values, null, null)
+                    
+                    // Also save the JSON and SRT files to public location
+                    saveJsonToPublicStorage(file.nameWithoutExtension + "_metadata.json", jsonContent)
+                    
+                    // Construct SRT content for public storage
+                    val srtName = file.nameWithoutExtension + ".srt"
+                    val sProject = jsonContent.let { 
+                        val obj = org.json.JSONObject(it)
+                        "ISO: ${obj.getInt("iso")} | SHUTTER: ${obj.getString("shutter_speed_formatted")} | ${obj.getInt("fps")} FPS | ${obj.getString("resolution")}"
+                    }
+                    val srtContent = "1\n00:00:00,000 --> 00:59:59,000\n$sProject"
+                    saveJsonToPublicStorage(srtName, srtContent) // Reusing the same function for .srt
+                    
+                    file.delete() // Clean up video cache
+                    
+                    withContext(Dispatchers.Main) {
+                        android.widget.Toast.makeText(context, "Saved to Gallery!", android.widget.Toast.LENGTH_SHORT).show()
+                        _uiState.value = _uiState.value.copy(
+                            isSaving = false, 
+                            currentMessage = "Recording Completed!",
+                            latestVideoUri = uri,
+                            showSavedConfirmation = true
+                        )
+                        parseMetadata(jsonContent)
+                        resetSavedConfirmation()
+                    }
+                } catch (e: Exception) {
+                    Log.e("CameraViewModel", "MediaStore save error", e)
+                    withContext(Dispatchers.Main) {
+                        _uiState.value = _uiState.value.copy(isSaving = false, currentMessage = "Error Saving to Gallery")
                     }
                 }
-                values.clear()
-                values.put(MediaStore.Video.Media.IS_PENDING, 0)
-                context.contentResolver.update(uri, values, null, null)
-                
-                // Also save the JSON and SRT files to public location
-                saveJsonToPublicStorage(file.nameWithoutExtension + "_metadata.json", jsonContent)
-                
-                // Construct SRT content for public storage
-                val srtName = file.nameWithoutExtension + ".srt"
-                val sProject = jsonContent.let { 
-                    val obj = org.json.JSONObject(it)
-                    "ISO: ${obj.getInt("iso")} | SHUTTER: ${obj.getString("shutter_speed_formatted")} | ${obj.getInt("fps")} FPS | ${obj.getString("resolution")}"
-                }
-                val srtContent = "1\n00:00:00,000 --> 00:59:59,000\n$sProject"
-                saveJsonToPublicStorage(srtName, srtContent) // Reusing the same function for .srt
-                
-                file.delete() // Clean up video cache
-                
-                viewModelScope.launch(Dispatchers.Main) {
-                    android.widget.Toast.makeText(context, "Saved to Gallery!", android.widget.Toast.LENGTH_SHORT).show()
-                    _uiState.value = _uiState.value.copy(
-                        isSaving = false, 
-                        currentMessage = "Captured!",
-                        latestVideoUri = uri,
-                        showSavedConfirmation = true
-                    )
-                    parseMetadata(jsonContent)
-                    resetSavedConfirmation()
-                }
-            } catch (e: Exception) {
-                Log.e("CameraViewModel", "MediaStore save error", e)
             }
         }
     }
