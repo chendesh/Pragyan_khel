@@ -6,7 +6,7 @@ app/build/
 .idea/
 local.properties
 .DS_Store
-*.apk
+# *.apk
 *.bundle
 
 # Node.js
