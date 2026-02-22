@@ -112,22 +112,33 @@ class RecordingEngine {
                 }
 
                 if (bufferInfo.size != 0 && muxerStarted) {
-                    encodedData.position(bufferInfo.offset)
-                    encodedData.limit(bufferInfo.offset + bufferInfo.size)
-                    
-                    // Slow Motion Timing: Space frames according to the target playback rate (e.g. 30fps)
-                    if (startTimeUs == -1L) startTimeUs = bufferInfo.presentationTimeUs
-                    
+                    // Frame Doubling Logic: 
+                    // To keep "240 FPS" metadata but get slow motion, we write multiple copies of each frame.
+                    val slowMoRatio = 2 // 2x slow motion
                     val frameDurationUs = 1_000_000L / playbackFps
-                    bufferInfo.presentationTimeUs = startTimeUs + (frameCount * frameDurationUs)
+                    
+                    for (i in 0 until slowMoRatio) {
+                        encodedData.position(bufferInfo.offset)
+                        encodedData.limit(bufferInfo.offset + bufferInfo.size)
+                        
+                        if (startTimeUs == -1L) startTimeUs = bufferInfo.presentationTimeUs
+                        
+                        val newInfo = MediaCodec.BufferInfo()
+                        newInfo.set(
+                            bufferInfo.offset, 
+                            bufferInfo.size, 
+                            startTimeUs + (frameCount * frameDurationUs), 
+                            bufferInfo.flags
+                        )
 
-                    try {
-                        muxer.writeSampleData(videoTrackIndex, encodedData, bufferInfo)
-                        frameCount++
-                        if (frameCount % 60 == 0) Log.d("RecordingEngine", "Written frame: $frameCount at 240fps timing")
-                    } catch (e: Exception) {
-                        Log.e("RecordingEngine", "muxer.writeSampleData fail: $e")
+                        try {
+                            muxer.writeSampleData(videoTrackIndex, encodedData, newInfo)
+                            frameCount++
+                        } catch (e: Exception) {
+                            Log.e("RecordingEngine", "muxer.writeSampleData duplicate fail: $e")
+                        }
                     }
+                    if (frameCount % 120 == 0) Log.d("RecordingEngine", "Processed frames: $frameCount (incl. slow-mo duplicates)")
                 }
 
                 codec.releaseOutputBuffer(outputBufferIndex, false)
