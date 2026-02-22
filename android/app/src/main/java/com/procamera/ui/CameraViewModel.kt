@@ -120,24 +120,27 @@ class CameraViewModel(
             if (recordingActive) {
                 val file = currentVideoFile ?: return
                 val size = _uiState.value.preferredSize
-                val recordingSurface = recordingEngine.setup(
-                    file, size.width, size.height, 
-                    _uiState.value.fps, 30, 50_000_000, "240FPS_MODE"
-                )
-                surfaces.add(recordingSurface)
+                try {
+                    val recordingSurface = recordingEngine.setup(
+                        file, size.width, size.height, 
+                        _uiState.value.fps, 30, 50_000_000, "240FPS_MODE"
+                    )
+                    surfaces.add(recordingSurface)
+                } catch (e: Exception) {
+                    Log.e("CameraViewModel", "Recorder setup failed: $e")
+                    _uiState.value = _uiState.value.copy(
+                        isRecording = false, 
+                        currentMessage = "Hardware Encoder Error: ${e.message}"
+                    )
+                    return
+                }
             }
             
-            // CRITICAL FIX: If hardware doesn't support HighSpeed, use standard session
-            if (_uiState.value.isHighSpeedSupported) {
-                cameraManager.createHighSpeedSession(surfaces)
-            } else {
-                // Potential future: add createStandardSession to cameraManager
-                // For now, retry with lower FPS if high speed fails
-                cameraManager.createHighSpeedSession(surfaces)
-            }
+            val isHighSpeedRequested = _uiState.value.fps >= 120 && _uiState.value.isHighSpeedSupported
+            cameraManager.createSession(surfaces, isHighSpeedRequested)
         } catch (e: Exception) {
             Log.e("CameraViewModel", "Session failed: $e")
-            _uiState.value = _uiState.value.copy(currentMessage = "Hardware restricted: Try 60 FPS")
+            _uiState.value = _uiState.value.copy(currentMessage = "Camera Error: Please Restart App")
         }
     }
 

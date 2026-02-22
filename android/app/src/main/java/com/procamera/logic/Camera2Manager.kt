@@ -13,7 +13,7 @@ class Camera2Manager(
     private val manualController: ManualController
 ) {
     private var cameraDevice: CameraDevice? = null
-    private var captureSession: CameraConstrainedHighSpeedCaptureSession? = null
+    private var captureSession: CameraCaptureSession? = null
     private var backgroundThread: HandlerThread? = null
     private var backgroundHandler: Handler? = null
 
@@ -68,80 +68,80 @@ class Camera2Manager(
         }
     }
 
-    fun createHighSpeedSession(surfaces: List<Surface>) {
+    fun createSession(surfaces: List<Surface>, isHighSpeed: Boolean) {
         val camera = cameraDevice ?: return
         sessionSurfaces = surfaces
         
-        // Close existing session before starting a new one
         captureSession?.close()
         captureSession = null
         
         try {
-            // MANDATORY for 240 FPS: Use ConstrainedHighSpeedCaptureSession
-            camera.createConstrainedHighSpeedCaptureSession(
-                surfaces,
-                object : CameraCaptureSession.StateCallback() {
-                    override fun onConfigured(session: CameraCaptureSession) {
-                        if (session is CameraConstrainedHighSpeedCaptureSession) {
+            if (isHighSpeed) {
+                camera.createConstrainedHighSpeedCaptureSession(
+                    surfaces,
+                    object : CameraCaptureSession.StateCallback() {
+                        override fun onConfigured(session: CameraCaptureSession) {
                             captureSession = session
-                            startHighSpeedPreview()
-                        } else {
-                            Log.e("Camera2Manager", "Not a HighSpeed session")
+                            startCapture(true)
                         }
-                    }
 
-                    override fun onConfigureFailed(p0: CameraCaptureSession) {
-                        Log.e("Camera2Manager", "HighSpeed configuration failed")
-                    }
-                },
-                backgroundHandler
-            )
+                        override fun onConfigureFailed(p0: CameraCaptureSession) {
+                            Log.e("Camera2Manager", "HighSpeed configuration failed, retrying standard...")
+                            createSession(surfaces, false)
+                        }
+                    },
+                    backgroundHandler
+                )
+            } else {
+                camera.createCaptureSession(
+                    surfaces,
+                    object : CameraCaptureSession.StateCallback() {
+                        override fun onConfigured(session: CameraCaptureSession) {
+                            captureSession = session
+                            startCapture(false)
+                        }
+
+                        override fun onConfigureFailed(p0: CameraCaptureSession) {
+                            Log.e("Camera2Manager", "Standard configuration failed")
+                        }
+                    },
+                    backgroundHandler
+                )
+            }
         } catch (e: Exception) {
             Log.e("Camera2Manager", "Fatal session error: $e")
         }
     }
 
-    private fun startHighSpeedPreview() {
+    private fun startCapture(isHighSpeed: Boolean) {
         val session = captureSession ?: return
         val camera = cameraDevice ?: return
-        // Use TEMPLATE_RECORD explicitly for high speed
-        val builder = camera.createCaptureRequest(CameraDevice.TEMPLATE_RECORD) ?: return
+        val builder = camera.createCaptureRequest(
+            if (isHighSpeed) CameraDevice.TEMPLATE_RECORD else CameraDevice.TEMPLATE_PREVIEW
+        ) ?: return
         
-        // Add all surfaces as targets
         sessionSurfaces.forEach { builder.addTarget(it) }
         
-        // Use CONTINUOUS_VIDEO AF to keep the video sharp while recording
-        builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO)
-        builder.set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_OFF)
-        
-        // Critical: Enable High Speed Scene Mode
-        builder.set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_USE_SCENE_MODE)
-        builder.set(CaptureRequest.CONTROL_SCENE_MODE, CaptureRequest.CONTROL_SCENE_MODE_HIGH_SPEED_VIDEO)
-        
-        // Push the sensor to its limits: Disable power saving/ZSL for 240fps
-        builder.set(CaptureRequest.CONTROL_ENABLE_ZSL, false)
-        builder.set(CaptureRequest.CONTROL_AE_LOCK, false)
-        builder.set(CaptureRequest.CONTROL_AWB_LOCK, false)
-        
-        // Detect hardware characteristics
-        val manager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
-        val characteristics = manager.getCameraCharacteristics(camera.id)
-        val configMap = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
-        
-        // Strictly target 240
-        val ranges = configMap?.getHighSpeedVideoFpsRanges() ?: emptyArray()
-        val validRange = ranges.find { it.upper == 240 && it.lower == 240 } 
-            ?: ranges.find { it.upper == 240 }
-            ?: android.util.Range(240, 240)
+        if (isHighSpeed) {
+            builder.set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_USE_SCENE_MODE)
+            builder.set(CaptureRequest.CONTROL_SCENE_MODE, CaptureRequest.CONTROL_SCENE_MODE_HIGH_SPEED_VIDEO)
+            
+            val manager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
+            val characteristics = manager.getCameraCharacteristics(camera.id)
+            val configMap = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+            val ranges = configMap?.getHighSpeedVideoFpsRanges() ?: emptyArray()
+            val validRange = ranges.find { it.upper == 240 } ?: android.util.Range(240, 240)
+            builder.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, validRange)
+        }
 
-        builder.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, validRange)
-
-        manualController.setFpsRange(validRange)
         manualController.applyManualSettings(builder)
         
-        // List of capture requests for high speed (must match the high speed session requirements)
-        val requestList = session.createHighSpeedRequestList(builder.build())
-        session.setRepeatingBurst(requestList, null, backgroundHandler)
+        if (isHighSpeed && session is CameraConstrainedHighSpeedCaptureSession) {
+            val requestList = session.createHighSpeedRequestList(builder.build())
+            session.setRepeatingBurst(requestList, null, backgroundHandler)
+        } else {
+            session.setRepeatingRequest(builder.build(), null, backgroundHandler)
+        }
     }
 
     fun closeCamera() {
