@@ -253,6 +253,11 @@ fun PlaybackScreen(
 ) {
     val context = LocalContext.current
     val playbackEngine = remember { com.procamera.logic.PlaybackEngine(context) }
+    var slowMoEnabled by remember { mutableStateOf(true) } // Default to slow motion
+
+    LaunchedEffect(slowMoEnabled) {
+        playbackEngine.setSlowMotion(slowMoEnabled, metadata?.actualFps ?: 120)
+    }
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         // Video Player
@@ -266,11 +271,43 @@ fun PlaybackScreen(
             modifier = Modifier.fillMaxSize()
         )
 
-        // Metadata Overlay
+        // Control Overlay (Top)
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Slow Mo Toggle
+            Button(
+                onClick = { slowMoEnabled = !slowMoEnabled },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (slowMoEnabled) Color.Yellow else Color.DarkGray
+                ),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text(
+                    if (slowMoEnabled) "SLOW MOTION: ON" else "SLOW MOTION: OFF",
+                    color = if (slowMoEnabled) Color.Black else Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            // Close Button
+            IconButton(
+                onClick = { 
+                    playbackEngine.release()
+                    onClose() 
+                }
+            ) {
+                Text("✕", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 28.sp)
+            }
+        }
+
+        // Metadata Overlay (Bottom)
         if (metadata != null) {
             Column(
                 modifier = Modifier
-                    .align(Alignment.TopStart)
+                    .align(Alignment.BottomStart)
                     .padding(24.dp)
                     .background(Color.Black.copy(alpha = 0.6f))
                     .padding(12.dp)
@@ -284,17 +321,6 @@ fun PlaybackScreen(
                 val date = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date(metadata.timestamp))
                 MetadataItem("TIME", date, size = 18)
             }
-        }
-
-        // Close Button
-        IconButton(
-            onClick = { 
-                playbackEngine.release()
-                onClose() 
-            },
-            modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)
-        ) {
-            Text("X", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 24.sp)
         }
     }
 }

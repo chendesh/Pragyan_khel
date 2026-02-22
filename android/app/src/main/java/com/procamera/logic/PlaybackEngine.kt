@@ -21,9 +21,12 @@ class PlaybackEngine(private val context: Context) {
         }
     }
 
-    fun setSlowMotion(isEnabled: Boolean) {
-        // 240 fps at 0.125 speed = plays like perfect slow motion at 30fps
-        val speed = if (isEnabled) 0.125f else 1.0f
+    fun setSlowMotion(isEnabled: Boolean, captureFps: Int) {
+        // Calculate speed to targets 30fps playback
+        // e.g. 240 fps -> 30/240 = 0.125 speed
+        // e.g. 120 fps -> 30/120 = 0.25 speed
+        val targetSpeed = 30f / captureFps.coerceAtLeast(30)
+        val speed = if (isEnabled) targetSpeed else 1.0f
         player?.playbackParameters = PlaybackParameters(speed)
     }
 
