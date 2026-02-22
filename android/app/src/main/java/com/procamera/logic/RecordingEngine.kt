@@ -116,7 +116,6 @@ class RecordingEngine {
                     encodedData.limit(bufferInfo.offset + bufferInfo.size)
                     
                     if (startTimeUs == -1L) startTimeUs = bufferInfo.presentationTimeUs
-                    
                     val frameDurationUs = 1_000_000L / playbackFps
                     bufferInfo.presentationTimeUs = startTimeUs + (frameCount * frameDurationUs)
 
