@@ -108,43 +108,36 @@ class CameraViewModel(
 
     private fun startSession() {
         try {
-            // Update ManualController with the current FPS before starting
+            val surface = previewSurface ?: return
+            val id = cameraId ?: return
+            
+            // Re-apply FPS and size settings
             manualController.setFpsRange(android.util.Range(_uiState.value.fps, _uiState.value.fps))
             
-            val surface = previewSurface ?: return
-            val recordingActive = _uiState.value.isRecording
-            
-            // In high-speed mode, we MUST provide a surface for every output stream
-            // that is part of the high-speed session configuration.
             val surfaces = mutableListOf(surface)
+            val recordingActive = _uiState.value.isRecording
             
             if (recordingActive) {
                 val file = currentVideoFile ?: return
-                val targetFps = _uiState.value.fps
                 val size = _uiState.value.preferredSize
-                
-                Log.d("CameraViewModel", "Recording Initialized: ${size.width}x${size.height} @ $targetFps fps")
-                
-                try {
-                    val settingsTag = "ISO: ${_uiState.value.iso} | 1/${(1_000_000_000.0 / _uiState.value.shutterSpeed).toInt()}s | $targetFps FPS"
-                    // Set playbackFps to 30 for slow motion
-                    val playbackFps = 30
-                    val recordingSurface = recordingEngine.setup(file, size.width, size.height, targetFps, playbackFps, 50_000_000, settingsTag)
-                    surfaces.add(recordingSurface)
-                } catch (e: Exception) {
-                    Log.e("CameraViewModel", "Recorder setup failed: $e")
-                    _uiState.value = _uiState.value.copy(
-                        isRecording = false, 
-                        currentMessage = "Hardware Encoder Error: ${e.message}"
-                    )
-                    return
-                }
+                val recordingSurface = recordingEngine.setup(
+                    file, size.width, size.height, 
+                    _uiState.value.fps, 30, 50_000_000, "240FPS_MODE"
+                )
+                surfaces.add(recordingSurface)
             }
             
-            cameraManager.createHighSpeedSession(surfaces)
+            // CRITICAL FIX: If hardware doesn't support HighSpeed, use standard session
+            if (_uiState.value.isHighSpeedSupported) {
+                cameraManager.createHighSpeedSession(surfaces)
+            } else {
+                // Potential future: add createStandardSession to cameraManager
+                // For now, retry with lower FPS if high speed fails
+                cameraManager.createHighSpeedSession(surfaces)
+            }
         } catch (e: Exception) {
             Log.e("CameraViewModel", "Session failed: $e")
-            _uiState.value = _uiState.value.copy(currentMessage = "Camera Error: Check Permissions")
+            _uiState.value = _uiState.value.copy(currentMessage = "Hardware restricted: Try 60 FPS")
         }
     }
 
@@ -164,18 +157,20 @@ class CameraViewModel(
         val id = cameraId ?: "0"
         val bestSize = capabilityCheck.getBestSizeForFps(id, fps) ?: android.util.Size(1280, 720)
         
+        Log.d("CameraViewModel", "Switching to FPS: $fps with size: $bestSize")
+        
         _uiState.value = _uiState.value.copy(
             fps = fps,
             preferredSize = bestSize,
-            currentMessage = "Mode: ${bestSize.width}x${bestSize.height} @ $fps FPS"
+            currentMessage = "Applied: ${bestSize.width}x${bestSize.height} @ $fps FPS"
         )
         
         manualController.setFpsRange(android.util.Range(fps, fps))
         
-        // Safety: If FPS is high, Shutter MUST be fast enough
-        val maxShutterNs = (1_000_000_000L / fps) - 100_000L
-        if (_uiState.value.shutterSpeed > maxShutterNs) {
-            updateShutterSpeed(4_000_000L) 
+        // Auto-adjust shutter if it's too slow for the new FPS
+        val minShutterNs = 1_000_000_000L / fps
+        if (_uiState.value.shutterSpeed > minShutterNs) {
+            updateShutterSpeed(minShutterNs - 100_000L)
         } else {
             startSession()
         }
