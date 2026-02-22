@@ -114,25 +114,29 @@ class CameraViewModel(
             val surface = previewSurface ?: return
             val recordingActive = _uiState.value.isRecording
             
+            // In high-speed mode, we MUST provide a surface for every output stream
+            // that is part of the high-speed session configuration.
             val surfaces = mutableListOf(surface)
             
             if (recordingActive) {
                 val file = currentVideoFile ?: return
                 val targetFps = _uiState.value.fps
-                val size = _uiState.value.preferredSize // Use the validated hardware-supported size
+                val size = _uiState.value.preferredSize
                 
                 Log.d("CameraViewModel", "Recording Initialized: ${size.width}x${size.height} @ $targetFps fps")
                 
                 try {
                     val settingsTag = "ISO: ${_uiState.value.iso} | 1/${(1_000_000_000.0 / _uiState.value.shutterSpeed).toInt()}s | $targetFps FPS"
-                    // setup(file, width, height, captureFps, playbackFps, bitrate, settingsTag)
-                    // Set playbackFps to 30 for automatic 8x/4x slow motion in the final file
+                    // Set playbackFps to 30 for slow motion
                     val playbackFps = 30
                     val recordingSurface = recordingEngine.setup(file, size.width, size.height, targetFps, playbackFps, 50_000_000, settingsTag)
                     surfaces.add(recordingSurface)
                 } catch (e: Exception) {
                     Log.e("CameraViewModel", "Recorder setup failed: $e")
-                    _uiState.value = _uiState.value.copy(isRecording = false, currentMessage = "Hardware Encoder Error")
+                    _uiState.value = _uiState.value.copy(
+                        isRecording = false, 
+                        currentMessage = "Hardware Encoder Error: ${e.message}"
+                    )
                     return
                 }
             }
@@ -140,7 +144,7 @@ class CameraViewModel(
             cameraManager.createHighSpeedSession(surfaces)
         } catch (e: Exception) {
             Log.e("CameraViewModel", "Session failed: $e")
-            _uiState.value = _uiState.value.copy(currentMessage = "Camera busy or restricted")
+            _uiState.value = _uiState.value.copy(currentMessage = "Camera Error: Check Permissions")
         }
     }
 
@@ -213,16 +217,18 @@ class CameraViewModel(
         
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                // Tight loop without fixed delay for maximum performance at 240fps
+                // Critical: Initial drain to clear buffers before high-speed stream hits
+                recordingEngine.drainEncoder(false)
+                
                 while (_uiState.value.isRecording) {
                     recordingEngine.drainEncoder(false)
-                    // Removing fixed delay, using yield for fairer scheduling
-                    kotlinx.coroutines.yield() 
+                    // At 240fps, we need to yield frequently to let the UI and Muxer catch up
+                    kotlinx.coroutines.delay(1) 
                 }
             } catch (e: Exception) {
                 Log.e("CameraViewModel", "Recording loop error: $e")
                 withContext(Dispatchers.Main) {
-                    _uiState.value = _uiState.value.copy(currentMessage = "Recording interrupted")
+                    _uiState.value = _uiState.value.copy(currentMessage = "Recording stopped: ${e.message}")
                 }
             }
         }
