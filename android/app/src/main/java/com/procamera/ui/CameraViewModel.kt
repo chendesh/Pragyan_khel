@@ -17,6 +17,7 @@ import android.Manifest
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
 import java.io.File
 import android.provider.MediaStore
 import android.content.ContentValues
@@ -55,9 +56,18 @@ class CameraViewModel(
     private var currentVideoFile: File? = null
 
     init {
-        checkCapabilities()
+        // Offload heavy checks to background thread to prevent UI stall
+        viewModelScope.launch(Dispatchers.IO) {
+            checkCapabilities()
+        }
         manualController.setFpsRange(android.util.Range(240, 240))
         cameraManager.startBackgroundThread()
+    }
+
+    fun notifyPermissionGranted() {
+        if (previewSurface != null) {
+            onSurfaceReady(previewSurface!!)
+        }
     }
 
     private fun checkCapabilities() {
@@ -85,31 +95,44 @@ class CameraViewModel(
 
     fun onSurfaceReady(surface: Surface) {
         previewSurface = surface
-        val id = cameraId ?: return
         
-        // Safety: Don't open if permission is missing
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-            _uiState.value = _uiState.value.copy(currentMessage = "Waiting for Permissions...")
-            return
-        }
-
-        try {
-            cameraManager.openCamera(id, object : Camera2Manager.CameraStateCallback {
-                override fun onOpened(camera: CameraDevice) {
-                    _uiState.value = _uiState.value.copy(currentMessage = "Camera Ready")
-                    startSession()
+        viewModelScope.launch {
+            val id = cameraId ?: run {
+                // If capabilities haven't finished checking, wait briefly
+                withContext(Dispatchers.IO) {
+                    var retries = 0
+                    while (cameraId == null && retries < 20) {
+                        delay(100)
+                        retries++
+                    }
                 }
+                cameraId ?: "0"
+            }
+            
+            // Safety: Don't open if permission is missing
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                _uiState.value = _uiState.value.copy(currentMessage = "Waiting for Permissions...")
+                return@launch
+            }
 
-                override fun onDisconnected() {
-                    _uiState.value = _uiState.value.copy(currentMessage = "Camera Disconnected")
-                }
+            try {
+                cameraManager.openCamera(id, object : Camera2Manager.CameraStateCallback {
+                    override fun onOpened(camera: CameraDevice) {
+                        _uiState.value = _uiState.value.copy(currentMessage = "Camera Ready")
+                        startSession()
+                    }
 
-                override fun onError(error: Int) {
-                    _uiState.value = _uiState.value.copy(currentMessage = "Camera Error: $error")
-                }
-            })
-        } catch (e: Exception) {
-            Log.e("CameraViewModel", "Failed to open camera: $e")
+                    override fun onDisconnected() {
+                        _uiState.value = _uiState.value.copy(currentMessage = "Camera Disconnected")
+                    }
+
+                    override fun onError(error: Int) {
+                        _uiState.value = _uiState.value.copy(currentMessage = "Camera Error: $error")
+                    }
+                })
+            } catch (e: Exception) {
+                Log.e("CameraViewModel", "Error opening camera: $e")
+            }
         }
     }
 

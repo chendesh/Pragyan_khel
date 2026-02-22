@@ -19,7 +19,9 @@ class MainActivity : ComponentActivity() {
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        // Handle results if needed
+        if (permissions[Manifest.permission.CAMERA] == true) {
+            viewModel.notifyPermissionGranted() 
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
