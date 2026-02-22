@@ -64,15 +64,15 @@ class CameraViewModel(
         val caps = capabilityCheck.checkHighSpeedSupport()
         val supportedEntry = caps.entries.firstOrNull { it.value.isSupported }
         
-        // Use the high-speed camera if found, otherwise default to the first available camera (usually "0")
         cameraId = supportedEntry?.key ?: "0"
         val supported = supportedEntry != null
+        val maxHardwareFps = supportedEntry?.value?.maxFps ?: 60
 
         _uiState.value = _uiState.value.copy(
             isHighSpeedSupported = supported,
             preferredSize = supportedEntry?.value?.preferredSize ?: android.util.Size(1280, 720),
-            fps = supportedEntry?.value?.maxFps ?: 240,
-            currentMessage = if (supported) "240 FPS Supported!" else "Limited Hardware - 240 FPS not available"
+            fps = if (maxHardwareFps >= 120) 120 else 60, // Start safe at 120 or 60
+            currentMessage = if (supported) "High Speed Ready (Max: $maxHardwareFps FPS)" else "Standard Mode - 240 FPS not supported"
         )
     }
 
@@ -158,20 +158,27 @@ class CameraViewModel(
 
     fun updateFps(fps: Int) {
         val id = cameraId ?: "0"
-        val bestSize = capabilityCheck.getBestSizeForFps(id, fps) ?: android.util.Size(1280, 720)
         
-        Log.d("CameraViewModel", "Switching to FPS: $fps with size: $bestSize")
+        // Verify if this FPS is actually supported by looking at hardware caps
+        val caps = capabilityCheck.checkHighSpeedSupport()[id]
+        val maxAvailable = caps?.maxFps ?: 60
+        
+        // If user requested 240 but hardware only does 120, cap it
+        val finalFps = if (fps > maxAvailable) 60 else fps
+        
+        val bestSize = capabilityCheck.getBestSizeForFps(id, finalFps) ?: android.util.Size(1280, 720)
+        
+        Log.d("CameraViewModel", "Mode Change: $finalFps FPS | Size: $bestSize | MaxHardware: $maxAvailable")
         
         _uiState.value = _uiState.value.copy(
-            fps = fps,
+            fps = finalFps,
             preferredSize = bestSize,
-            currentMessage = "Applied: ${bestSize.width}x${bestSize.height} @ $fps FPS"
+            currentMessage = "Mode: ${bestSize.width}x${bestSize.height} @ $finalFps FPS"
         )
         
-        manualController.setFpsRange(android.util.Range(fps, fps))
+        manualController.setFpsRange(android.util.Range(finalFps, finalFps))
         
-        // Auto-adjust shutter if it's too slow for the new FPS
-        val minShutterNs = 1_000_000_000L / fps
+        val minShutterNs = 1_000_000_000L / finalFps
         if (_uiState.value.shutterSpeed > minShutterNs) {
             updateShutterSpeed(minShutterNs - 100_000L)
         } else {

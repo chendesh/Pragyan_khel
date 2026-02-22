@@ -7,7 +7,7 @@ class ManualController {
 
     private var currentIso: Int = 400
     private var currentShutterSpeed: Long = 1_000_000L // 1ms in nanoseconds
-    private var currentFpsRange: Range<Int> = Range(240, 240)
+    var currentFpsRange: Range<Int> = Range(240, 240)
 
     fun applyManualSettings(builder: CaptureRequest.Builder) {
         // Enable manual control by turning off Auto-Exposure

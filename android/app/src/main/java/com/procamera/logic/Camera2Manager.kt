@@ -130,17 +130,28 @@ class Camera2Manager(
             val characteristics = manager.getCameraCharacteristics(camera.id)
             val configMap = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
             val ranges = configMap?.getHighSpeedVideoFpsRanges() ?: emptyArray()
-            val validRange = ranges.find { it.upper == 240 } ?: android.util.Range(240, 240)
+            
+            // CRITICAL: Only set a range if it actually exists in the hardware list
+            val targetFps = if (manualController.currentFpsRange?.upper ?: 0 >= 120) manualController.currentFpsRange?.upper ?: 240 else 240
+            val validRange = ranges.find { it.upper == targetFps } 
+                ?: ranges.maxByOrNull { it.upper } 
+                ?: android.util.Range(30, 30)
+            
+            Log.d("Camera2Manager", "Setting FPS Range: $validRange (Requested: $targetFps)")
             builder.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, validRange)
         }
 
         manualController.applyManualSettings(builder)
         
-        if (isHighSpeed && session is CameraConstrainedHighSpeedCaptureSession) {
-            val requestList = session.createHighSpeedRequestList(builder.build())
-            session.setRepeatingBurst(requestList, null, backgroundHandler)
-        } else {
-            session.setRepeatingRequest(builder.build(), null, backgroundHandler)
+        try {
+            if (isHighSpeed && session is CameraConstrainedHighSpeedCaptureSession) {
+                val requestList = session.createHighSpeedRequestList(builder.build())
+                session.setRepeatingBurst(requestList, null, backgroundHandler)
+            } else {
+                session.setRepeatingRequest(builder.build(), null, backgroundHandler)
+            }
+        } catch (e: Exception) {
+            Log.e("Camera2Manager", "Repeating request failed: $e")
         }
     }
 
