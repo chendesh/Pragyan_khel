@@ -68,11 +68,18 @@ class CameraViewModel(
         val supported = supportedEntry != null
         val maxHardwareFps = supportedEntry?.value?.maxFps ?: 60
 
+        // Preferred Initial State: 
+        // If 240 is supported, start at 240/1080p. 
+        // If only 120 is supported, start at 120/720p.
+        // Otherwise 60/720p.
+        val targetFps = if (maxHardwareFps >= 240) 240 else if (maxHardwareFps >= 120) 120 else 60
+        val bestSize = capabilityCheck.getBestSizeForFps(cameraId!!, targetFps) ?: android.util.Size(1280, 720)
+
         _uiState.value = _uiState.value.copy(
             isHighSpeedSupported = supported,
-            preferredSize = supportedEntry?.value?.preferredSize ?: android.util.Size(1280, 720),
-            fps = if (maxHardwareFps >= 120) 120 else 60, // Start safe at 120 or 60
-            currentMessage = if (supported) "High Speed Ready (Max: $maxHardwareFps FPS)" else "Standard Mode - 240 FPS not supported"
+            preferredSize = bestSize,
+            fps = targetFps,
+            currentMessage = if (supported) "System: ${bestSize.width}x${bestSize.height} @ $targetFps FPS" else "Standard Mode Active"
         )
     }
 

@@ -43,10 +43,14 @@ class HardwareCapabilityCheck(private val context: Context) {
                     } catch (e: Exception) { false }
                 }
 
-                // Of those, try to find 1080p. If not, pick the largest available.
-                val preferredSize = supportedByFps.find { it.width == 1920 && it.height == 1080 }
-                    ?: supportedByFps.maxByOrNull { it.width * it.height }
-                    ?: highSpeedSizes.firstOrNull() ?: android.util.Size(1280, 720)
+                // User requirement: 240fps -> 1080p, 120/60fps -> 720p
+                val preferredSize = if (target == 240) {
+                    supportedByFps.find { it.width == 1920 && it.height == 1080 }
+                        ?: supportedByFps.maxByOrNull { it.width * it.height }
+                } else {
+                    supportedByFps.find { it.width == 1280 && it.height == 720 }
+                        ?: supportedByFps.minByOrNull { it.width * it.height }
+                } ?: highSpeedSizes.firstOrNull() ?: android.util.Size(1280, 720)
 
                 results[cameraId] = HighSpeedCapability(
                     isSupported = maxFps >= 120,
@@ -55,7 +59,7 @@ class HardwareCapabilityCheck(private val context: Context) {
                     preferredSize = preferredSize
                 )
 
-                Log.d("CapabilityCheck", "Camera $cameraId: Max FPS $maxFps, Optimal Size: $preferredSize")
+                Log.d("CapabilityCheck", "Camera $cameraId: Max FPS $maxFps, Selected Size: $preferredSize")
             }
         } catch (e: Exception) {
             Log.e("CapabilityCheck", "Error checking high speed support", e)
@@ -69,13 +73,22 @@ class HardwareCapabilityCheck(private val context: Context) {
         val characteristics = manager.getCameraCharacteristics(cameraId)
         val configMap = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP) ?: return null
         
-        val highSpeedSizes = configMap.highSpeedVideoSizes
+        val highSpeedSizes = configMap.highSpeedVideoSizes ?: return null
         val supportedByFps = highSpeedSizes.filter { size ->
-            configMap.getHighSpeedVideoFpsRangesFor(size).any { it.upper >= targetFps }
+            try {
+                configMap.getHighSpeedVideoFpsRangesFor(size).any { it.upper >= targetFps }
+            } catch (e: Exception) { false }
         }
 
-        // Try for 1080p first, then largest available
-        return supportedByFps.find { it.width == 1920 && it.height == 1080 }
-            ?: supportedByFps.maxByOrNull { it.width * it.height }
+        if (supportedByFps.isEmpty()) return null
+
+        // User requirement: 240fps -> 1080p, 120/60fps -> 720p
+        return if (targetFps >= 240) {
+            supportedByFps.find { it.width == 1920 && it.height == 1080 }
+                ?: supportedByFps.maxByOrNull { it.width * it.height } // Fallback to largest if 1080p missing
+        } else {
+            supportedByFps.find { it.width == 1280 && it.height == 720 }
+                ?: supportedByFps.minByOrNull { it.width * it.height } // Fallback to smallest/standard if 720p missing
+        }
     }
 }
