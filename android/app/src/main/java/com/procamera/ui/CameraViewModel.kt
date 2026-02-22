@@ -130,7 +130,7 @@ class CameraViewModel(
                 try {
                     val recordingSurface = recordingEngine.setup(
                         file, size.width, size.height, 
-                        _uiState.value.fps, 60, 50_000_000, "240FPS_MODE"
+                        _uiState.value.fps, _uiState.value.fps / 2, 50_000_000, "240FPS_MODE"
                     )
                     surfaces.add(recordingSurface)
                 } catch (e: Exception) {
