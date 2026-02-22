@@ -303,23 +303,23 @@ fun PlaybackScreen(
             }
         }
 
-        // Metadata Overlay (Bottom)
+        // Metadata Overlay (Top-Left)
         if (metadata != null) {
             Column(
                 modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(24.dp)
-                    .background(Color.Black.copy(alpha = 0.6f))
+                    .align(Alignment.TopStart)
+                    .padding(top = 80.dp, start = 24.dp) // Padded down to avoid Slow-Mo button
+                    .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
                     .padding(12.dp)
             ) {
                 Text("CAPTURE METADATA", color = Color.Yellow, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 Spacer(Modifier.height(4.dp))
-                MetadataItem("ISO", metadata.iso.toString(), size = 18)
-                MetadataItem("SHUTTER", metadata.shutterSpeed, size = 18)
-                MetadataItem("RECORD FPS", metadata.actualFps.toString(), size = 18)
-                MetadataItem("RESOLUTION", metadata.resolution, size = 18)
+                MetadataItem("ISO", metadata.iso.toString(), size = 16)
+                MetadataItem("SHUTTER", metadata.shutterSpeed, size = 16)
+                MetadataItem("RECORD FPS", metadata.actualFps.toString(), size = 16)
+                MetadataItem("RESOLUTION", metadata.resolution, size = 16)
                 val date = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date(metadata.timestamp))
-                MetadataItem("TIME", date, size = 18)
+                MetadataItem("TIME", date, size = 16)
             }
         }
     }
