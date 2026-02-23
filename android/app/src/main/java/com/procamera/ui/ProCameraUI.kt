@@ -32,15 +32,6 @@ import java.io.File
 fun ProCameraScreen(viewModel: CameraViewModel) {
     val uiState by viewModel.uiState.collectAsState()
     val haptic = LocalHapticFeedback.current
-    var showHistory by remember { mutableStateOf(false) }
-
-    if (showHistory) {
-        VideoHistoryScreen(
-            viewModel = viewModel,
-            onClose = { showHistory = false }
-        )
-        return
-    }
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         // Real Camera Preview
@@ -193,7 +184,7 @@ fun ProCameraScreen(viewModel: CameraViewModel) {
                         .padding(start = 24.dp)
                         .size(50.dp)
                         .background(Color.DarkGray, CircleShape)
-                        .clickable { showHistory = true },
+                        .clickable { viewModel.toggleHistory(true) },
                     contentAlignment = Alignment.Center
                 ) {
                     Text("LIST", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -201,7 +192,17 @@ fun ProCameraScreen(viewModel: CameraViewModel) {
             }
         }
 
-        // Full Screen Video Player with Metadata Overlay
+        // --- OVERLAYS ---
+
+        // 1. Internal Video History Overly
+        if (uiState.showHistory) {
+            VideoHistoryScreen(
+                viewModel = viewModel,
+                onClose = { viewModel.toggleHistory(false) }
+            )
+        }
+
+        // 2. Full Screen Video Player
         if (uiState.showPlayer && uiState.latestVideoUri != null) {
             PlaybackScreen(
                 uri = uiState.latestVideoUri!!,

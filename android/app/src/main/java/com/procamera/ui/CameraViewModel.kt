@@ -32,10 +32,11 @@ data class CameraUiState(
     val isHighSpeedSupported: Boolean = false,
     val preferredSize: android.util.Size = android.util.Size(1280, 720),
     val currentMessage: String = "",
+    val showSavedConfirmation: Boolean = false,
+    val showPlayer: Boolean = false,
+    val showHistory: Boolean = false,
     val latestVideoUri: android.net.Uri? = null,
     val latestMetadata: com.procamera.models.VideoMetadata? = null,
-    val showPlayer: Boolean = false,
-    val showSavedConfirmation: Boolean = false,
     val localVideos: List<File> = emptyList()
 )
 
@@ -82,10 +83,15 @@ class CameraViewModel(
         }
     }
 
-    fun refreshVideoList() {
+    private fun refreshVideoList() {
         viewModelScope.launch(Dispatchers.IO) {
             loadVideos()
         }
+    }
+
+    fun toggleHistory(show: Boolean) {
+        _uiState.value = _uiState.value.copy(showHistory = show)
+        if (show) refreshVideoList()
     }
 
     fun playLocalVideo(file: File) {
@@ -93,6 +99,7 @@ class CameraViewModel(
         _uiState.value = _uiState.value.copy(
             latestVideoUri = uri,
             showPlayer = true
+            // Keep showHistory as true so we can return to it later
         )
         // Also try to find matching metadata if it exists
         val metadataFile = File(file.parent, file.nameWithoutExtension + "_metadata.json")
