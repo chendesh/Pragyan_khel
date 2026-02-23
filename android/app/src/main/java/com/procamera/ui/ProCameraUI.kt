@@ -32,6 +32,15 @@ import java.io.File
 fun ProCameraScreen(viewModel: CameraViewModel) {
     val uiState by viewModel.uiState.collectAsState()
     val haptic = LocalHapticFeedback.current
+    var showHistory by remember { mutableStateOf(false) }
+
+    if (showHistory) {
+        VideoHistoryScreen(
+            viewModel = viewModel,
+            onClose = { showHistory = false }
+        )
+        return
+    }
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         // Real Camera Preview
@@ -178,9 +187,16 @@ fun ProCameraScreen(viewModel: CameraViewModel) {
                     modifier = Modifier.size(80.dp)
                 ) {}
                 
-                // Add empty box for symmetry if latest video exists
-                if (uiState.latestVideoUri != null) {
-                    Spacer(Modifier.width(74.dp))
+                // Video List button (right of record button)
+                Box(
+                    modifier = Modifier
+                        .padding(start = 24.dp)
+                        .size(50.dp)
+                        .background(Color.DarkGray, CircleShape)
+                        .clickable { showHistory = true },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("LIST", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -320,6 +336,65 @@ fun PlaybackScreen(
                 MetadataItem("RESOLUTION", metadata.resolution, size = 16)
                 val date = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date(metadata.timestamp))
                 MetadataItem("TIME", date, size = 16)
+            }
+        }
+    }
+}
+
+@Composable
+fun VideoHistoryScreen(
+    viewModel: CameraViewModel,
+    onClose: () -> Unit
+) {
+    val uiState by viewModel.uiState.collectAsState()
+    
+    Column(modifier = Modifier.fillMaxSize().background(Color(0xFF121212))) {
+        // App Bar
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text("INTERNAL VIDEOS", color = Color.Green, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            IconButton(onClick = onClose) {
+                Text("✕", color = Color.White, fontSize = 24.sp)
+            }
+        }
+
+        if (uiState.localVideos.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("No videos stored in app yet.", color = Color.Gray)
+            }
+        } else {
+            androidx.compose.foundation.lazy.LazyColumn(
+                modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(uiState.localVideos.size) { index ->
+                    val file = uiState.localVideos[index]
+                    val date = java.text.SimpleDateFormat("MMM dd, HH:mm", java.util.Locale.getDefault()).format(java.util.Date(file.lastModified()))
+                    
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFF1E1E1E), RoundedCornerShape(12.dp))
+                            .clickable { viewModel.playLocalVideo(file) }
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            Modifier.size(48.dp).background(Color.Yellow.copy(alpha = 0.1f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("▶", color = Color.Yellow, fontSize = 20.sp)
+                        }
+                        Spacer(Modifier.width(16.dp))
+                        Column {
+                            Text(file.name, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                            Text(date, color = Color.Gray, fontSize = 12.sp)
+                        }
+                    }
+                }
             }
         }
     }

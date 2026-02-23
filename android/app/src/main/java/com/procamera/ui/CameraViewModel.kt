@@ -35,7 +35,8 @@ data class CameraUiState(
     val latestVideoUri: android.net.Uri? = null,
     val latestMetadata: com.procamera.models.VideoMetadata? = null,
     val showPlayer: Boolean = false,
-    val showSavedConfirmation: Boolean = false
+    val showSavedConfirmation: Boolean = false,
+    val localVideos: List<File> = emptyList()
 )
 
 class CameraViewModel(
@@ -59,6 +60,7 @@ class CameraViewModel(
         // Offload heavy checks to background thread to prevent UI stall
         viewModelScope.launch(Dispatchers.IO) {
             checkCapabilities()
+            loadVideos()
         }
         manualController.setFpsRange(android.util.Range(240, 240))
         cameraManager.startBackgroundThread()
@@ -67,6 +69,35 @@ class CameraViewModel(
     fun notifyPermissionGranted() {
         if (previewSurface != null) {
             onSurfaceReady(previewSurface!!)
+        }
+        refreshVideoList()
+    }
+
+    private fun loadVideos() {
+        val appVideoDir = File(context.filesDir, "videos")
+        if (appVideoDir.exists()) {
+            val files = appVideoDir.listFiles { file -> file.extension == "mp4" }
+                ?.sortedByDescending { it.lastModified() } ?: emptyList()
+            _uiState.value = _uiState.value.copy(localVideos = files)
+        }
+    }
+
+    fun refreshVideoList() {
+        viewModelScope.launch(Dispatchers.IO) {
+            loadVideos()
+        }
+    }
+
+    fun playLocalVideo(file: File) {
+        val uri = android.net.Uri.fromFile(file)
+        _uiState.value = _uiState.value.copy(
+            latestVideoUri = uri,
+            showPlayer = true
+        )
+        // Also try to find matching metadata if it exists
+        val metadataFile = File(file.parent, file.nameWithoutExtension + "_metadata.json")
+        if (metadataFile.exists()) {
+            parseMetadata(metadataFile.readText())
         }
     }
 
