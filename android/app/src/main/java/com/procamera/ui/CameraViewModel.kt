@@ -230,16 +230,9 @@ class CameraViewModel(
         val filename = "VID_${System.currentTimeMillis()}.mp4"
         val videoFile: File
         
-        // On Android 10+, we MUST use MediaStore for public folders, or getExternalFilesDir for private
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            // Use cache then move to MediaStore
-            videoFile = File(context.cacheDir, filename)
-        } else {
-            // Legacy: Save directly to DCIM for immediate gallery visibility
-            val dcimDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM)
-            val outputDir = File(dcimDir, "ProCamera").apply { if (!exists()) mkdirs() }
-            videoFile = File(outputDir, filename)
-        }
+        // Use internal files directory for persistent app storage
+        val appVideoDir = File(context.filesDir, "videos").apply { if (!exists()) mkdirs() }
+        videoFile = File(appVideoDir, filename)
 
         currentVideoFile = videoFile
         _uiState.value = _uiState.value.copy(
@@ -299,22 +292,31 @@ class CameraViewModel(
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                         saveToGalleryAndroidQ(file, jsonResponse)
                     } else {
-                        // For legacy devices, wait for MediaScanner
-                        kotlinx.coroutines.suspendCancellableCoroutine<android.net.Uri?> { continuation ->
-                            MediaScannerConnection.scanFile(context, arrayOf(file.absolutePath), null) { _, uri ->
-                                continuation.resume(uri) {}
-                            }
-                        }.let { uri ->
-                            withContext(Dispatchers.Main) {
-                                android.widget.Toast.makeText(context, "Saved to Gallery!", android.widget.Toast.LENGTH_SHORT).show()
-                                _uiState.value = _uiState.value.copy(
-                                    isSaving = false, 
-                                    currentMessage = "Recording Completed!",
-                                    latestVideoUri = uri,
-                                    showSavedConfirmation = true
-                                )
-                                parseMetadata(jsonResponse)
-                                resetSavedConfirmation()
+                        // For legacy devices, copy to public DCIM then scan
+                        withContext(Dispatchers.IO) {
+                            try {
+                                val dcimDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM)
+                                val outputDir = File(dcimDir, "ProCamera").apply { if (!exists()) mkdirs() }
+                                val publicFile = File(outputDir, file.name)
+                                file.inputStream().use { input ->
+                                    publicFile.outputStream().use { output ->
+                                        input.copyTo(output)
+                                    }
+                                }
+                                MediaScannerConnection.scanFile(context, arrayOf(publicFile.absolutePath), null) { _, uri ->
+                                    viewModelScope.launch {
+                                        _uiState.value = _uiState.value.copy(
+                                            isSaving = false,
+                                            currentMessage = "Saved to Gallery & App!",
+                                            latestVideoUri = uri,
+                                            showSavedConfirmation = true
+                                        )
+                                        parseMetadata(jsonResponse)
+                                        resetSavedConfirmation()
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                Log.e("CameraViewModel", "Legacy gallery save failed: $e")
                             }
                         }
                     }
@@ -399,7 +401,8 @@ class CameraViewModel(
                         Log.e("CameraViewModel", "Sidecar save failed but video ok: $e")
                     }
                     
-                    file.delete() // Clean up video cache
+                    // Keep the local copy in the app's internal storage
+                    // file.delete() removed as per user request to store in app also
                     
                     withContext(Dispatchers.Main) {
                         android.widget.Toast.makeText(context, "Saved to Gallery!", android.widget.Toast.LENGTH_SHORT).show()
